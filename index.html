@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Binom Statistic</title>
+
+        <link rel="icon" type="image/svg+xml"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h2v-2H7v2zm0 4h2v-2H7v2zm0-8h2V7H7v2zm4 4h2v-2h-2v2zm0 4h2v-2h-2v2zm0-8h2V7h-2v2zm4 4h2v-2h-2v2zm0 4h2v-2h-2v2zm0-8h2V7h-2v2zm4 4h2v-2h-2v2zm0 4h2v-2h-2v2zm0-8h2V7h-2v2z'/%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z'/%3E%3C/svg%3E">
+
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+            rel="stylesheet">
+        <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #a855f7;
+            --accent: #22d3ee;
+            --bg: #030712;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Анимированный Mesh-фон */
+        .mesh-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2;
+            filter: blur(100px);
+            opacity: 0.3;
+        }
+        .mesh-ball {
+            position: absolute;
+            width: 50vw; height: 50vw;
+            border-radius: 50%;
+            animation: move 25s infinite alternate cubic-bezier(0.45, 0, 0.55, 1);
+        }
+        @keyframes move {
+            from { transform: translate(-15%, -15%); }
+            to { transform: translate(15%, 15%); }
+        }
+
+        /* Canvas для нейронной анимации */
+        #neuralCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Поля ввода */
+        input[type="date"], select {
+            background-color: #111827 !important;
+            border: 1px solid #374151 !important;
+            color: #ffffff !important;
+            padding: 10px 14px;
+            border-radius: 12px;
+            outline: none;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        /* Карточки фильтрации */
+        .stat-card {
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-bottom: 4px solid transparent;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .stat-card.active-all { border-bottom-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
+        .stat-card.active-dolet { border-bottom-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .stat-card.active-past { border-bottom-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
+
+        .cyber-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            transition: all 0.3s ease;
+        }
+        .cyber-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -5px rgba(99, 102, 241, 0.4);
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            transition: all 0.2s;
+            color: #94a3b8;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table { min-width: 1000px; }
+        .no-wrap { white-space: nowrap; }
+
+        .drop-zone.active {
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+        }
+    </style>
+    </head>
+    <body class="p-4 md:p-12">
+
+        <div class="mesh-bg">
+            <div class="mesh-ball"
+                style="background: var(--primary); top: -10%; left: -10%;"></div>
+            <div class="mesh-ball"
+                style="background: var(--secondary); bottom: -10%; right: -10%; animation-delay: -5s;"></div>
+        </div>
+
+        <!-- Холст для выразительной нейросети -->
+        <canvas id="neuralCanvas"></canvas>
+
+        <div class="max-w-7xl mx-auto relative">
+            <!-- Header -->
+            <nav
+                class="flex flex-col lg:flex-row justify-between items-center mb-16 gap-8">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <svg class="w-7 h-7 text-white" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor"><path
+                                stroke-linecap="round" stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                    </div>
+                    <div>
+                        <h1
+                            class="text-3xl font-black text-white uppercase italic tracking-tighter leading-none">Binom
+                            Statistic</h1>
+                        <p
+                            class="text-slate-500 text-[10px] font-bold tracking-[3px] uppercase mt-1">Retention
+                            Analytics</p>
+                    </div>
+                </div>
+
+                <div id="globalSummary"
+                    class="hidden flex flex-wrap justify-center gap-4">
+                    <div
+                        class="glass px-6 py-4 rounded-[20px] border-b-2 border-indigo-500">
+                        <p
+                            class="text-[9px] text-slate-500 font-black uppercase mb-1">Всего
+                            депов</p>
+                        <span id="globalTotal"
+                            class="text-2xl font-black text-white leading-none">0</span>
+                    </div>
+                    <div
+                        class="glass px-6 py-4 rounded-[20px] border-b-2 border-emerald-500">
+                        <p
+                            class="text-[9px] text-slate-500 font-black uppercase mb-1">Всего
+                            долетов</p>
+                        <span id="globalDoletsCount"
+                            class="text-2xl font-black text-emerald-400 leading-none">0</span>
+                    </div>
+                    <div
+                        class="glass px-6 py-4 rounded-[20px] border-b-2 border-cyan-500">
+                        <p
+                            class="text-[9px] text-slate-500 font-black uppercase mb-1">Общий
+                            % Долета</p>
+                        <span id="globalDoletPercent"
+                            class="text-2xl font-black text-cyan-400 leading-none">0%</span>
+                    </div>
+                    <button id="resetBtn"
+                        class="p-4 rounded-[20px] glass hover:bg-red-500/10 text-red-400 transition-all border border-red-500/20">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor"><path stroke-linecap="round"
+                                stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Компактная зона загрузки -->
+            <section id="uploadSection" class="mb-16 flex justify-center">
+                <div id="dropZone"
+                    class="glass rounded-[40px] p-8 md:p-10 text-center cursor-pointer border-2 border-dashed border-white/10 hover:border-indigo-500/40 group transition-all max-w-2xl w-full">
+                    <div class="flex flex-col items-center">
+                        <div
+                            class="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500 border border-indigo-500/20 shadow-inner">
+                            <svg class="w-10 h-10 text-indigo-400" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor"><path
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                    stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" /></svg>
+                        </div>
+                        <h3
+                            class="text-2xl font-black mb-2 text-white uppercase tracking-tighter">Загрузка
+                            данных</h3>
+                        <p
+                            class="text-slate-400 text-sm mb-8 max-w-xs mx-auto">Перетащите
+                            CSV отчеты для анализа олд-депов.</p>
+                        <button
+                            class="cyber-btn text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-[11px]">Выбрать
+                            файлы</button>
+                        <input type="file" id="fileInput" multiple accept=".csv"
+                            class="hidden">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Main Dashboard -->
+            <main id="mainContent" class="hidden space-y-10">
+
+                <!-- Filters -->
+                <div
+                    class="glass rounded-[35px] p-8 flex flex-col lg:flex-row items-center justify-between gap-10 border-l-4 border-indigo-500">
+                    <div
+                        class="flex flex-col lg:flex-row items-center gap-10 w-full lg:w-auto">
+                        <div class="flex flex-col gap-2 w-full lg:w-auto">
+                            <span
+                                class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Период
+                                депозитов</span>
+                            <select id="dateRangePreset"
+                                class="font-bold w-full lg:min-w-[260px]">
+                                <option value="all" selected>За всё время (в
+                                    файлах)</option>
+                                <option value="custom">Выбранные
+                                    даты...</option>
+                            </select>
+                        </div>
+
+                        <div id="customDateContainer"
+                            class="hidden flex flex-col lg:flex-row gap-6 w-full lg:w-auto">
+                            <div class="flex flex-col gap-2 w-full lg:w-auto">
+                                <span
+                                    class="text-[10px] font-black text-slate-500 uppercase tracking-widest">От</span>
+                                <input type="date" id="dateStart"
+                                    class="font-bold w-full">
+                            </div>
+                            <div class="flex flex-col gap-2 w-full lg:w-auto">
+                                <span
+                                    class="text-[10px] font-black text-slate-500 uppercase tracking-widest">До</span>
+                                <input type="date" id="dateEnd"
+                                    class="font-bold w-full">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="px-6 py-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-indigo-400 font-black text-[11px] uppercase tracking-widest whitespace-nowrap">
+                        Status: <span class="text-white">QUA | DEP</span>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div id="cardAll"
+                        class="stat-card active-all glass rounded-[35px] p-8"
+                        onclick="setFilter('all')">
+                        <p
+                            class="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-4">Все
+                            депы за период</p>
+                        <h2 id="periodTotal"
+                            class="text-5xl font-black leading-none">0</h2>
+                    </div>
+
+                    <div id="cardDolet"
+                        class="stat-card glass rounded-[35px] p-8"
+                        onclick="setFilter('dolet')">
+                        <p
+                            class="text-emerald-500 text-[9px] font-black uppercase tracking-widest mb-4">Долеты
+                            (24ч+)</p>
+                        <div class="flex items-baseline gap-3">
+                            <h2 id="periodDolets"
+                                class="text-5xl font-black text-emerald-400 leading-none">0</h2>
+                            <span id="periodDoletRate"
+                                class="text-lg font-black text-slate-500">0%</span>
+                        </div>
+                    </div>
+
+                    <div id="cardPast"
+                        class="stat-card glass rounded-[35px] p-8 opacity-30 grayscale pointer-events-none"
+                        onclick="setFilter('past')">
+                        <p
+                            class="text-purple-400 text-[9px] font-black uppercase tracking-widest mb-4">Олд-депы
+                            прошлых мес.</p>
+                        <h2 id="pastMonthCount"
+                            class="text-5xl font-black text-purple-400 leading-none">0</h2>
+                    </div>
+
+                    <div id="tailCard"
+                        class="glass rounded-[35px] p-8 opacity-30 grayscale pointer-events-none">
+                        <p
+                            class="text-cyan-400 text-[9px] font-black uppercase tracking-widest mb-4">Доля
+                            олд-депов</p>
+                        <h2 id="oldTailPercent"
+                            class="text-5xl font-black leading-none">0%</h2>
+                        <div
+                            class="mt-4 h-2 bg-slate-900 rounded-full overflow-hidden">
+                            <div id="tailProgress"
+                                class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-1000"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Table UI -->
+                <div
+                    class="glass rounded-[45px] overflow-hidden shadow-2xl border border-white/5">
+                    <div
+                        class="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-900/30">
+                        <div
+                            class="flex flex-wrap justify-center p-1.5 bg-slate-950/80 rounded-2xl border border-white/10 gap-1">
+                            <button id="tabAll" class="tab-btn active"
+                                onclick="setFilter('all')">Все депы</button>
+                            <button id="tabDolet" class="tab-btn"
+                                onclick="setFilter('dolet')">Долеты
+                                24ч+</button>
+                            <button id="tabPast" class="tab-btn"
+                                onclick="setFilter('past')" disabled>Олд-депы
+                                прошлых мес.</button>
+                        </div>
+                        <button id="downloadBtn"
+                            class="cyber-btn text-white text-[10px] font-black px-10 py-3.5 rounded-xl uppercase tracking-widest shadow-lg">Экспорт
+                            выборки</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr
+                                    class="bg-slate-950/60 text-slate-500 text-[9px] uppercase tracking-[4px] font-black">
+                                    <th class="px-10 py-7 text-center">Тип</th>
+                                    <th class="px-10 py-7">Click ID</th>
+                                    <th class="px-10 py-7">Дата Клика</th>
+                                    <th class="px-10 py-7 text-white">Дата
+                                        Депозита</th>
+                                    <th
+                                        class="px-10 py-7 text-center">Post-Click</th>
+                                    <th class="px-10 py-7">Оффер</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"
+                                class="text-[12px] divide-y divide-white/5 font-medium"></tbody>
+                        </table>
+                    </div>
+                    <div id="emptyState" class="p-24 text-center hidden">
+                        <p
+                            class="text-slate-600 font-bold uppercase tracking-widest text-xs">Данные
+                            не найдены</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <script>
+        let allData = [];
+        let currentFilter = 'all';
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const mainContent = document.getElementById('mainContent');
+        const uploadSection = document.getElementById('uploadSection');
+        const dateStartInput = document.getElementById('dateStart');
+        const dateEndInput = document.getElementById('dateEnd');
+        const tableBody = document.getElementById('tableBody');
+        const emptyState = document.getElementById('emptyState');
+        const presetSelect = document.getElementById('dateRangePreset');
+        const customDateContainer = document.getElementById('customDateContainer');
+
+        // --- Выразительная Нейронная Анимация ---
+        const canvas = document.getElementById('neuralCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4;
+                this.radius = Math.random() * 1.5 + 2; // Увеличил размер точек
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(129, 140, 248, 0.7)'; // Сделал ярче
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(99, 102, 241, 0.5)';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const count = Math.floor(window.innerWidth / 20); // Чуть меньше точек, но они крупнее
+            for (let i = 0; i < count; i++) particles.push(new Particle());
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, i) => {
+                p.update();
+                p.draw();
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = p.x - particles[j].x;
+                    const dy = p.y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 180) { // Увеличил дистанцию связей
+                        ctx.beginPath();
+                        // Более контрастные линии
+                        const alpha = 0.3 - dist / 600;
+                        ctx.strokeStyle = `rgba(99, 102, 241, ${alpha})`;
+                        ctx.lineWidth = 1;
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            });
+            requestAnimationFrame(animateParticles);
+        }
+
+        window.addEventListener('resize', () => { resizeCanvas(); initParticles(); });
+        resizeCanvas();
+        initParticles();
+        animateParticles();
+
+        // --- Бизнес-логика ---
+        function animateValue(obj, start, end, duration) {
+            if (!obj) return;
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const val = Math.floor(progress * (end - start) + start);
+                obj.innerHTML = val.toLocaleString();
+                if (progress < 1) requestAnimationFrame(step);
+                else obj.innerHTML = end.toLocaleString();
+            };
+            requestAnimationFrame(step);
+        }
+
+        function setFilter(filterType) {
+            currentFilter = filterType;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const activeTab = document.getElementById('tab' + filterType.charAt(0).toUpperCase() + filterType.slice(1));
+            if (activeTab) activeTab.classList.add('active');
+            
+            document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active-all', 'active-dolet', 'active-past'));
+            const activeCard = document.getElementById('card' + filterType.charAt(0).toUpperCase() + filterType.slice(1));
+            if (activeCard) {
+                if (filterType === 'all') activeCard.classList.add('active-all');
+                if (filterType === 'dolet') activeCard.classList.add('active-dolet');
+                if (filterType === 'past') activeCard.classList.add('active-past');
+            }
+            updateAnalysis(false);
+        }
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(n => {
+            dropZone.addEventListener(n, e => { e.preventDefault(); e.stopPropagation(); });
+        });
+        dropZone.addEventListener('drop', e => { dropZone.classList.remove('active'); handleFiles(e.dataTransfer.files); });
+        dropZone.addEventListener('dragover', () => dropZone.classList.add('active'));
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('active'));
+
+        presetSelect.addEventListener('change', (e) => {
+            customDateContainer.classList.toggle('hidden', e.target.value !== 'custom');
+            updateAnalysis(true);
+        });
+
+        [dateStartInput, dateEndInput].forEach(el => el.addEventListener('change', () => updateAnalysis(true)));
+        document.getElementById('resetBtn').addEventListener('click', () => location.reload());
+
+        function parseBinomHours(str) {
+            if (!str) return 0;
+            let h = 0;
+            const d = str.match(/(\d+)\s*d\./);
+            const hrs = str.match(/(\d+)\s*h\./);
+            const m = str.match(/(\d+)\s*m\./);
+            if (d) h += parseInt(d[1]) * 24;
+            if (hrs) h += parseInt(hrs[1]);
+            if (m) h += parseInt(m[1]) / 60;
+            return h;
+        }
+
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            let allRows = [];
+            const promises = Array.from(files).map(file => {
+                return new Promise((resolve) => {
+                    Papa.parse(file, {
+                        header: true, delimiter: ";", skipEmptyLines: true,
+                        complete: (res) => { 
+                            const onlyDeps = res.data.filter(row => {
+                                if (!row['Status']) return false;
+                                const s = row['Status'].toLowerCase();
+                                return s === 'qua' || s === 'dep';
+                            });
+                            allRows = allRows.concat(onlyDeps); 
+                            resolve(); 
+                        }
+                    });
+                });
+            });
+
+            await Promise.all(promises);
+            const uniqueMap = new Map();
+            allRows.forEach(row => {
+                const cid = row['Click ID'];
+                if (cid && !uniqueMap.has(cid)) {
+                    const cDate = row['Conversion Time'] ? new Date(row['Conversion Time'].replace(/-/g, "/")) : null;
+                    const clickDate = row['Time Click'] ? new Date(row['Time Click'].replace(/-/g, "/")) : null;
+                    const hours = parseBinomHours(row['Time since click']);
+                    let isOldDepRow = false;
+                    if (cDate && clickDate) {
+                        isOldDepRow = (clickDate.getFullYear() < cDate.getFullYear()) || (clickDate.getFullYear() === cDate.getFullYear() && clickDate.getMonth() < cDate.getMonth());
+                    }
+                    uniqueMap.set(cid, { ...row, convDateObj: cDate, clickDateObj: clickDate, totalHours: hours, isDolet: hours >= 24, isOldDep: isOldDepRow });
+                }
+            });
+
+            allData = Array.from(uniqueMap.values());
+            const gDolets = allData.filter(r => r.isDolet).length;
+            const gPerc = allData.length > 0 ? (gDolets / allData.length * 100) : 0;
+            
+            animateValue(document.getElementById('globalTotal'), 0, allData.length, 1000);
+            animateValue(document.getElementById('globalDoletsCount'), 0, gDolets, 1000);
+            document.getElementById('globalDoletPercent').innerText = `${gPerc.toFixed(1)}%`;
+            document.getElementById('globalSummary').classList.remove('hidden');
+            uploadSection.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+            updateAnalysis(true);
+        }
+
+        function updateAnalysis(animate = true) {
+            const preset = presetSelect.value;
+            let start = null; let end = null;
+            if (preset === 'custom' && dateStartInput.value && dateEndInput.value) {
+                start = new Date(dateStartInput.value.replace(/-/g, "/")); start.setHours(0, 0, 0, 0);
+                end = new Date(dateEndInput.value.replace(/-/g, "/")); end.setHours(23, 59, 59, 999);
+            }
+            const filteredByDate = (preset === 'all' || !start || !end) ? allData : allData.filter(row => row.convDateObj >= start && row.convDateObj <= end);
+            const doletsInPeriod = filteredByDate.filter(r => r.isDolet);
+            const isPeriodMode = preset !== 'all' && start && end;
+            const pastCard = document.getElementById('cardPast');
+            const tailCard = document.getElementById('tailCard');
+            const pastTab = document.getElementById('tabPast');
+
+            let fromPastMonth = [];
+            if (isPeriodMode) {
+                pastCard.classList.remove('opacity-30', 'grayscale', 'pointer-events-none');
+                tailCard.classList.remove('opacity-30', 'grayscale', 'pointer-events-none');
+                pastTab.disabled = false;
+                const sY = start.getFullYear(); const sM = start.getMonth();
+                fromPastMonth = filteredByDate.filter(row => {
+                    if (!row.clickDateObj) return false;
+                    return (row.clickDateObj.getFullYear() < sY) || (row.clickDateObj.getFullYear() === sY && row.clickDateObj.getMonth() < sM);
+                });
+            } else {
+                pastCard.classList.add('opacity-30', 'grayscale', 'pointer-events-none');
+                tailCard.classList.add('opacity-30', 'grayscale', 'pointer-events-none');
+                pastTab.disabled = true;
+                if(currentFilter === 'past') setFilter('all');
+            }
+
+            if (animate) {
+                animateValue(document.getElementById('periodTotal'), 0, filteredByDate.length, 800);
+                animateValue(document.getElementById('periodDolets'), 0, doletsInPeriod.length, 800);
+                animateValue(document.getElementById('pastMonthCount'), 0, fromPastMonth.length, 800);
+            } else {
+                document.getElementById('periodTotal').innerText = filteredByDate.length.toLocaleString();
+                document.getElementById('periodDolets').innerText = doletsInPeriod.length.toLocaleString();
+                document.getElementById('pastMonthCount').innerText = fromPastMonth.length.toLocaleString();
+            }
+            
+            const doletRate = filteredByDate.length > 0 ? (doletsInPeriod.length / filteredByDate.length * 100) : 0;
+            document.getElementById('periodDoletRate').innerText = `${doletRate.toFixed(1)}%`;
+            const tailPerc = filteredByDate.length > 0 ? (fromPastMonth.length / filteredByDate.length * 100) : 0;
+            document.getElementById('oldTailPercent').innerText = `${tailPerc.toFixed(1)}%`;
+            document.getElementById('tailProgress').style.width = `${tailPerc}%`;
+
+            const displayData = currentFilter === 'dolet' ? doletsInPeriod : (currentFilter === 'past' && isPeriodMode ? fromPastMonth : filteredByDate);
+            renderTable(displayData);
+        }
+
+        function renderTable(data) {
+            tableBody.innerHTML = '';
+            if (data.length === 0) { emptyState.classList.remove('hidden'); return; }
+            emptyState.classList.add('hidden');
+            data.slice(0, 1000).forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = `hover:bg-white/5 transition-all ${row.isOldDep ? 'bg-purple-500/5' : ''}`;
+                tr.innerHTML = `<td class="px-10 py-6 text-center">${row.isOldDep ? '<span class="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[9px] font-black uppercase tracking-tighter no-wrap">Олд-Деп</span>' : (row.isDolet ? '<span class="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest no-wrap">Долет</span>' : '<span class="px-3 py-1.5 rounded-full bg-slate-800 text-slate-500 text-[9px] font-black uppercase no-wrap">Fresh</span>')}</td><td class="px-10 py-6 font-mono text-[10px] text-indigo-300/60 no-wrap">${row['Click ID']}</td><td class="px-10 py-6 text-slate-500 text-xs no-wrap">${row['Time Click']}</td><td class="px-10 py-6 text-white font-bold text-xs no-wrap">${row['Conversion Time']}</td><td class="px-10 py-6 text-center no-wrap"><span class="px-3 py-1 bg-slate-950 rounded-lg text-xs font-bold ${row.isDolet ? 'text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(52,211,153,0.1)]' : 'text-slate-500'}">${row['Time since click']}</span></td><td class="px-10 py-6 text-slate-400 truncate max-w-[200px] text-xs font-medium italic">${row['Offer'] || '-'}</td>`;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const csv = Papa.unparse(allData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = `binom_audit_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+        });
+    </script>
+    </body>
+</html>
